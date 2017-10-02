@@ -12,14 +12,17 @@ training_iters = int(sys.argv[3])
 batch_size = 30
 display_step = 10
 #model_path = "./model/1D_{}_model_{}_{}.ckpt".format(sys.argv[3], sys.argv[1], sys.argv[2])
-model_path = "./model/{}_model_{}_{}.ckpt".format(sys.argv[3], sys.argv[1], sys.argv[2])
+model_path = "./model/phase2_{}_model_{}_{}.ckpt".format(sys.argv[3], sys.argv[1], sys.argv[2])
 
 # Network Parameters
 #n_input = 1 
 n_input = 22
 n_steps = 6 # timesteps
 n_hidden = 130 # hidden layer num of features
-n_classes = 1 
+n_after_encode = 50 
+n_before_encode = 21 
+n_classes = 51 
+n_output = 1
 
 def readData(filename, answerfile):
     return np.load(filename), np.load(answerfile)
@@ -29,6 +32,13 @@ def getBatch(size, data, answer):
     random.shuffle(temp)
     x, y = zip(*temp)
     return np.array(x[:size]), np.reshape(np.array(y[:size]), (size, 1))
+
+def encoded(x, weights, biases):
+    two_D_x = tf.reshape(x[:,:,0:21], [tf.shape(x)[0] * n_steps, 21])
+    temp_x = tf.nn.relu(tf.matmul(two_D_x, weights['encode']) + biases['encode'])
+    temp_encoded_x = tf.reshape(temp_x, [tf.shape(x)[0], n_steps, n_after_encode])
+    encoded_x = tf.concat([temp_encoded_x, x[:,:,-1:]],2)
+    return encoded_x
 
 def RNN(x, weights, biases):
 
@@ -40,55 +50,61 @@ def RNN(x, weights, biases):
     x = tf.unstack(x, n_steps, 1)
 
     # Define a lstm cell with tensorflow
-    lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, activation=tf.nn.relu)
+    #lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, activation=tf.nn.relu)
+    lstm_cell = rnn.LSTMCell(n_hidden, forget_bias=1.0, activation=tf.nn.relu, use_peepholes = True)
 
     # Get lstm cell output
     outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
 
     # Linear activation, using rnn inner loop last output
 
+    #rnn_output = tf.matmul(outputs[-1], weights['rnn']) + biases['rnn']
     return tf.matmul(outputs[-1], weights['out']) + biases['out']
     
-
-
 # ReadData
 #datapath = './data/{}_{}_1D_'.format(sys.argv[1], sys.argv[2])
-datapath = './data/{}_{}_'.format(sys.argv[1], sys.argv[2])
+datapath = './data/phase2_{}_{}_'.format(sys.argv[1], sys.argv[2])
 traindata, trainanswer = readData(datapath + 'train_data.npy', datapath + 'train_data_ans.npy') 
 validdata, validanswer = readData(datapath + 'valid_data.npy', datapath + 'valid_data_ans.npy')
 
 #with open('./temp/1D_{}_{}_trainrecord'.format(sys.argv[1], sys.argv[2]), 'r') as f:
-with open('./temp/{}_{}_trainrecord'.format(sys.argv[1], sys.argv[2]), 'r') as f:
+with open('./temp/phase2_{}_{}_trainrecord'.format(sys.argv[1], sys.argv[2]), 'r') as f:
     trainformat = f.read()
 trainformat = trainformat.split('\n')
 #with open('./temp/1D_{}_{}_validrecord'.format(sys.argv[1], sys.argv[2]), 'r') as f:
-with open('./temp/{}_{}_validrecord'.format(sys.argv[1], sys.argv[2]), 'r') as f:
+with open('./temp/phase2_{}_{}_validrecord'.format(sys.argv[1], sys.argv[2]), 'r') as f:
     validformat = f.read()
 validformat = validformat.split('\n')
 
 # tf Graph input
 with tf.name_scope('input'):
     x = tf.placeholder("float", [None, n_steps, n_input], name = 'x-input')
-    y = tf.placeholder("float", [None, n_classes], name = 'y-input')
+    y = tf.placeholder("float", [None, n_output], name = 'y-input')
 
 # Define weights
 with tf.name_scope('weights'):
     weights = {
-        'out': tf.Variable(tf.random_normal([n_hidden, n_classes]))
+        'encode': tf.Variable(tf.random_normal([n_before_encode, n_after_encode])),
+        #'rnn': tf.Variable(tf.random_normal([n_hidden, n_classes])),
+        'out': tf.Variable(tf.random_normal([n_hidden, n_output]))
     }
 with tf.name_scope('biases'):
     biases = {
-        'out': tf.Variable(tf.random_normal([n_classes]))
+        'encode': tf.Variable(tf.random_normal([n_after_encode])),
+        #'rnn': tf.Variable(tf.random_normal([n_classes])),
+        'out': tf.Variable(tf.random_normal([n_output]))
     }
-
+with tf.name_scope('encode-layer'):
+    encoded_x = encoded(x, weights, biases)
 with tf.name_scope('RNN'):
-    pred = RNN(x, weights, biases)
+    pred = RNN(encoded_x, weights, biases)
 
 # Define loss and optimizer
 # cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
 with tf.name_scope('Error'):
     cost = tf.reduce_mean(tf.pow(y - pred, 2))
     tf.summary.scalar('Cost', cost)
+
 with tf.name_scope('AdamOptimizer'):
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 
@@ -138,7 +154,7 @@ with tf.Session() as sess:
         trainformat[index] += ",{}".format(trainpred[index][0])
         #print(trainformat[index])
 
-    validdata, validanswer = getBatch(70, validdata, validanswer)
+    validdata, validanswer = getBatch(80, validdata, validanswer)
     validpred = sess.run(pred, feed_dict={x:validdata})
     for index, value in enumerate(validformat):
         validformat[index] += ",{}".format(validpred[index][0])

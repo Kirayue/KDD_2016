@@ -39,10 +39,10 @@ def produceData(data):
 if __name__ == '__main__':
     data = {}
     #prefix = '/home/kirayue/KDD/model/rnn/pred/{}_{}_{}_{}_sub_avg.csv'
-    prefix = '/home/kirayue/KDD/model/rnn/pred/{}_{}_{}_sub_avg.csv'
+    prefix = '/home/kirayue/KDD/model/rnn/pred/phase2_{}_{}_{}_sub_avg.csv'
     part = [1, 2]
     time = [0, 20, 40]
-    iteration = [10000, 15000, 20000, 25000, 30000, 35000]
+    iteration = [10000, 15000, 10000, 15000, 10000, 18000]
     #iteration = [30000, 35000, 40000, 45000, 65000, 70000]
     count = 0
     for p in part:

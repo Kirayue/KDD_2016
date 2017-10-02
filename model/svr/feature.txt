@@ -1,0 +1,11 @@
+1. weekday
+2. tollgateID
+3. 2hr前的車流量
+4. in or out
+5. hour
+6. minute
+7. holliday
+
+weekday => (1, 0, 0, 0, 0, 0, 0)
+tollgate_id => (1, 0, 0)
+direction => (0, 1)

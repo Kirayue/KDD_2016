@@ -1,1 +1,7 @@
 data/
+model/__pycache__/
+model/rnn/logs/
+model/rnn/model/
+model/rnn/temp/
+*.csv
+

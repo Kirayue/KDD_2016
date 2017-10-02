@@ -4,11 +4,11 @@ import numpy as np
 import cal_avg_volume as statistic
 import produce_testdata as pt 
 global_var = {
-        "input": ['/home/kirayue/KDD/data/scripts/training_20min_avg_volume.csv', '/home/kirayue/KDD/data/weather (table 7)_training_update.csv'],
+        "input": ['/home/kirayue/KDD/data/scripts/training_20min_avg_volume_phase2.csv', '/home/kirayue/KDD/data/weather (table 7)_training_update.csv'],
         "after_time": int(sys.argv[1]), # 0, 20, 40, 60, 80, 100
         'part': int(sys.argv[2]),
         'stop': sys.argv[3],
-        'valid': ['2016-10-11', '2016-10-18']
+        'valid': ['2016-10-17', '2016-10-25']
         }
 
 def readRawData(inputfile):
@@ -81,7 +81,7 @@ def produceData(data, avg_volume):
         ### check for holliday
         holiday = 0
         prefix = key[:4]
-        if datetime(2016, 9, 15) <= starttime <= datetime(2016, 9, 17) or datetime(2016, 10, 1) <= starttime <= datetime(2016, 10, 7):
+        if datetime(2016, 9, 15) <= starttime <= datetime(2016, 9, 18) or datetime(2016, 10, 1) <= starttime <= datetime(2016, 10, 8):
             holiday = 1
         if ((starttime.hour == 8 or starttime.hour == 17) and starttime.minute == global_var['after_time'] and global_var['part'] == 1) or ((starttime.hour == 9 or starttime.hour == 18) and starttime.minute == global_var['after_time'] and global_var['part'] == 2):
             theday = "{}-{}-{}".format(key[0], key[2], starttime.strftime('%Y-%m-%d %H:%M:%S'))
@@ -115,25 +115,32 @@ def produceData(data, avg_volume):
                 validdata.append(sequence_data)
                 validanswer.append(float(value['volume']))
                 validformat.append(rowsub)
+                '''
+            else:
+                traindata.append(sequence_data)
+                trainanswer.append(float(value['volume']))
+                trainformat.append(rowsub)
+                '''
             traindata.append(sequence_data)
             trainanswer.append(float(value['volume']))
             trainformat.append(rowsub)
+
     return np.array(traindata), np.array(trainanswer), trainformat, np.array(validdata), np.array(validanswer), validformat
 if __name__ == '__main__':
     rawdata = readRawData(global_var['input'][0])
     data = preprocessData(rawdata)
     avg_volume = statistic.avg_volume(data, global_var['stop'])
     traindata, trainanswer, trainformat, validdata, validanswer, validformat= produceData(data, avg_volume)
-    prefix = '/home/kirayue/KDD/model/rnn/data/' + str(global_var['after_time']) + '_' + str(global_var['part'])+ '_'
+    prefix = '/home/kirayue/KDD/model/rnn/data/phase2_' + str(global_var['after_time']) + '_' + str(global_var['part'])+ '_'
     np.save(prefix + 'train_data', traindata)
     print('Train data shape: ' + str(traindata.shape))
     np.save(prefix + 'train_data_ans', trainanswer)
     print('Train answer data shape: ' + str(trainanswer.shape))
-    with open('./temp/{}_{}_trainrecord'.format(global_var['after_time'], global_var['part']), 'w') as f:
+    with open('./temp/phase2_{}_{}_trainrecord'.format(global_var['after_time'], global_var['part']), 'w') as f:
         f.write('\n'.join(trainformat))
     np.save(prefix + 'valid_data', validdata)
     print('Valid data shape: ' + str(validdata.shape))
     np.save(prefix + 'valid_data_ans', validanswer)
     print('Valid answer data shape: ' + str(validanswer.shape))
-    with open('./temp/{}_{}_validrecord'.format(global_var['after_time'], global_var['part']), 'w') as f:
+    with open('./temp/phase2_{}_{}_validrecord'.format(global_var['after_time'], global_var['part']), 'w') as f:
         f.write('\n'.join(validformat))

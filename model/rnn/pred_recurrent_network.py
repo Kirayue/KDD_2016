@@ -14,10 +14,10 @@ training_iters = 40000
 batch_size = 30
 display_step = 10
 global_var = {
-    "input": ['/home/kirayue/KDD/data/scripts/training_20min_avg_volume.csv', '/home/kirayue/KDD/data/scripts/test1_20min_avg_volume.csv', '/home/kirayue/KDD/data/dataSets/testing_phase1/weather (table 7)_test1.csv'],
-    "stop": '2016-11-18',
+    "input": ['/home/kirayue/KDD/data/scripts/training_20min_avg_volume_phase2.csv', '/home/kirayue/KDD/data/scripts/test2_20min_avg_volume_phase2.csv', '/home/kirayue/KDD/data/dataSets/testing_phase1/weather (table 7)_test1.csv'],
+    "stop": '2016-10-25',
     #"model_path": "./model/1D_{}_model_{}_{}.ckpt".format(sys.argv[3], sys.argv[1], sys.argv[2])
-    "model_path": "./model/{}_model_{}_{}.ckpt".format(sys.argv[3], sys.argv[1], sys.argv[2])
+    "model_path": "./model/phase2_{}_model_{}_{}.ckpt".format(sys.argv[3], sys.argv[1], sys.argv[2])
     }
 
 pred_combine = ['11', '10', '20', '31', '30']
@@ -37,7 +37,10 @@ n_input = 22
 #n_input = 1
 n_steps = 6 # timesteps
 n_hidden = 130 # hidden layer num of features
-n_classes = 1 
+n_after_encode = 50 
+n_before_encode = 21 
+n_classes = 51
+n_output = 1
 
 def readData(filename, answerfile):
     return np.load(filename), np.load(answerfile)
@@ -48,6 +51,13 @@ def getBatch(size, data, answer):
     x, y = zip(*temp)
     return np.array(x[:size]), np.reshape(np.array(y[:size]), (size, 1))
     
+def encoded(x, weights, biases):
+    two_D_x = tf.reshape(x[:,:,0:21], [tf.shape(x)[0] * n_steps, 21])
+    temp_x = tf.nn.relu(tf.matmul(two_D_x, weights['encode']) + biases['encode'])
+    temp_encoded_x = tf.reshape(temp_x, [tf.shape(x)[0], n_steps, n_after_encode])
+    encoded_x = tf.concat([temp_encoded_x, x[:,:,-1:]],2)
+    return encoded_x
+
 def RNN(x, weights, biases):
 
     # Prepare data shape to match `rnn` function requirements
@@ -58,16 +68,18 @@ def RNN(x, weights, biases):
     x = tf.unstack(x, n_steps, 1)
 
     # Define a lstm cell with tensorflow
-    lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, activation=tf.nn.relu)
+    #lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0, activation=tf.nn.relu)
+    lstm_cell = rnn.LSTMCell(n_hidden, forget_bias=1.0, activation=tf.nn.relu, use_peepholes=True)
 
     # Get lstm cell output
     outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
 
-    # Linear activation, using rnn inner loop last output
+    #rnn_output = tf.matmul(outputs[-1], weights['rnn']) + biases['rnn']
+    #return tf.matmul(rnn_output, weights['out']) + biases['out']
     return tf.matmul(outputs[-1], weights['out']) + biases['out']
 
 #datapath = './data/{}_{}_1D_'.format(sys.argv[1], sys.argv[2])
-datapath = './data/{}_{}_'.format(sys.argv[1], sys.argv[2])
+datapath = './data/phase2_{}_{}_'.format(sys.argv[1], sys.argv[2])
 validdata, validanswer = readData(datapath + 'valid_data.npy', datapath + 'valid_data_ans.npy')
 rawtestdata = pt.readRawData(global_var['input'][1])
 rawtraindata = pt.readRawData(global_var['input'][0])
@@ -77,20 +89,25 @@ avg_volume = statistic.avg_volume(data, global_var['stop'])
 
 with tf.name_scope('input'):
     x = tf.placeholder("float", [None, n_steps, n_input], name = 'x-input')
-    y = tf.placeholder("float", [None, n_classes], name = 'y-input')
+    y = tf.placeholder("float", [None, n_output], name = 'y-input')
 
 # Define weights
 with tf.name_scope('weights'):
     weights = {
-        'out': tf.Variable(tf.random_normal([n_hidden, n_classes]))
+        'encode': tf.Variable(tf.random_normal([n_before_encode, n_after_encode])),
+        #'rnn': tf.Variable(tf.random_normal([n_hidden, n_classes])),
+        'out': tf.Variable(tf.random_normal([n_hidden, n_output]))
     }
 with tf.name_scope('biases'):
     biases = {
-        'out': tf.Variable(tf.random_normal([n_classes]))
+        #'rnn': tf.Variable(tf.random_normal([n_classes])),
+        'encode': tf.Variable(tf.random_normal([n_after_encode])),
+        'out': tf.Variable(tf.random_normal([n_output]))
     }
-
+with tf.name_scope('encode-layer'):
+    encoded_x = encoded(x, weights, biases)
 with tf.name_scope('RNN'):
-    pred = RNN(x, weights, biases)
+    pred = RNN(encoded_x, weights, biases)
 
 # Define loss and optimizer
 # cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
@@ -118,7 +135,7 @@ with tf.Session() as sess:
     # Restore model weights from previously saved model
     saver.restore(sess, global_var["model_path"])
     print("Model restored from file: {}".format(global_var['model_path']))
-    validdata, validanswer = getBatch(70, validdata, validanswer)
+    validdata, validanswer = getBatch(80, validdata, validanswer)
     print("Valid MAPE:", \
         sess.run(evaluation, feed_dict={x: validdata, y: validanswer}))
 
@@ -131,7 +148,7 @@ with tf.Session() as sess:
                 for e in pred_combine:
                     gateid = e[0]
                     direction = e[1]
-                    preddate = "{}-{}-2016-10-{} {}:{}:00".format(gateid, direction, i + 18, h, m)
+                    preddate = "{}-{}-2016-10-{} {}:{}:00".format(gateid, direction, i + 25, h, m)
                     testdata = pt.produceData(data, avg_volume, preddate)
                     rowsub = pt.produceSub(preddate)
                     predresult = sess.run(pred, feed_dict={x:testdata})
@@ -139,7 +156,7 @@ with tf.Session() as sess:
                     sub.append(rowsub)
                     #data[preddate] = {'volume': predresult[0][0]}
     #prefix = '/home/kirayue/KDD/model/rnn/pred/1D_{}_{}_{}_'.format(sys.argv[3], sys.argv[1], sys.argv[2])
-    prefix = '/home/kirayue/KDD/model/rnn/pred/{}_{}_{}_'.format(sys.argv[3], sys.argv[1], sys.argv[2])
+    prefix = '/home/kirayue/KDD/model/rnn/pred/phase2_{}_{}_{}_'.format(sys.argv[3], sys.argv[1], sys.argv[2])
     with open(prefix + 'sub_avg.csv', 'w') as f:
         f.write('\n'.join(sub))
 print(datapath)
